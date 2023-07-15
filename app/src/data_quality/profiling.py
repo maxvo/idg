@@ -76,7 +76,7 @@ class DataProfiler:
     def run(self, columns: list[str] = []):
         """Returns a DataFrame with the result of the profiling.
 
-        If there is no list of columns is empty,
+        If the list of columns names is empty,
         we run the default analysis in every column.
         If the list is not empty, we only run analysis on the list of columns.
 

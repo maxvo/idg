@@ -25,7 +25,7 @@ class DataProfiler:
         """Starts a PyDequu AnalysisRunner on self.df using self.spark."""
         self.analysis_runner = AnalysisRunner(self.spark).onData(self.df)
 
-    def add_default_analysis(self, column: str):
+    def add_column_analysis(self, column: str):
         """Implements a basic profiling for a column.
 
         For all columns types, we are profiling:
@@ -53,7 +53,7 @@ class DataProfiler:
 
     def all_columns(self):
         """Adds the default analysis for every column in self.df"""
-        [self.add_default_analysis(column) for column in self.df.columns]
+        [self.add_column_analysis(column) for column in self.df.columns]
 
     def selected_columns(self, columns: list[str]):
         """Adds the default analysis for selected columns in self.df
@@ -63,7 +63,7 @@ class DataProfiler:
         column: list[str]
             The list of columns name that will be profiled.
         """
-        [self.add_default_analysis(column) for column in columns]
+        [self.add_column_analysis(column) for column in columns]
 
     def run_type(self, columns: list[str]):
         """Run analysis based on type.

@@ -1,6 +1,6 @@
 from attrs import define, field
 from pyspark.sql import SparkSession, DataFrame
-from pydeequ.analyzers import AnalysisRunner,\
+from pydeequ.analyzers import AnalysisRunner, Size,\
     Completeness, AnalyzerContext, ApproxQuantiles, CountDistinct,\
     Distinctness, Maximum, Mean, Minimum,\
     StandardDeviation, Sum, Uniqueness
@@ -24,6 +24,9 @@ class DataProfiler:
     def __attrs_post_init__(self):
         """Starts a PyDequu AnalysisRunner on self.df using self.spark."""
         self.analysis_runner = AnalysisRunner(self.spark).onData(self.df)
+
+    def add_dataset_analysis(self):
+        self.analysis_runner.addAnalyzer(Size())
 
     def add_column_analysis(self, column: str):
         """Implements a basic profiling for a column.
@@ -72,6 +75,7 @@ class DataProfiler:
             self.all_columns()
         else:
             self.selected_columns(columns)
+        self.add_dataset_analysis()
 
     def run(self, columns: list[str] = []):
         """Returns a DataFrame with the result of the profiling.

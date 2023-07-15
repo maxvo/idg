@@ -1,56 +1,93 @@
-from attrs import define
+from attrs import define, field
 from pyspark.sql import SparkSession, DataFrame
-from pyspark.sql.types import DecimalType
-from pydeequ.analyzers import AnalysisRunner, AnalysisRunBuilder,\
-    Completeness, AnalyzerContext, ApproxQuantiles, ApproxCountDistinct,\
-    DataType, Distinctness, Maximum, Mean, Minimum,\
+from pydeequ.analyzers import AnalysisRunner,\
+    Completeness, AnalyzerContext, ApproxQuantiles, CountDistinct,\
+    Distinctness, Maximum, Mean, Minimum,\
     StandardDeviation, Sum, Uniqueness
 
 
 @define
 class DataProfiler:
+    """Uses PyDeequ to create data profilling metrics in a PySpark DataFrame.
+
+    Parameters
+    --------
+    spark : SparkSession
+        A SparkSession that enables PyDeequ operations.
+    df: pyspark.sql.DataFrame
+        The DataFrame where the profilling will be aplied.
+    """
     spark: SparkSession
     df: DataFrame
+    analysis_runner: AnalysisRunner = field(init=False)
 
-    def columns_name_and_type(self, df: DataFrame):
-        return dict(df.dtypes)
+    def __attrs_post_init__(self):
+        """Starts a PyDequu AnalysisRunner on self.df using self.spark."""
+        self.analysis_runner = AnalysisRunner(self.spark).onData(self.df)
 
-    def default(self, profile: AnalysisRunBuilder, column: str):
-        (profile
+    def add_default_analysis(self, column: str):
+        """Implements a basic profiling for a column.
+
+        For all columns types, we are profiling:
+        Completeness, Distinctness, Uniqueness.
+        For numeric columns, we are profiling:
+        Maximum, Minimum, Mean, StandardDeviation, Sum, and Quantiles.
+
+        Parameters
+        --------
+        column: str
+            The column name that will be profiled.
+        """
+        (self.analysis_runner
          .addAnalyzer(Completeness(column))
-         .addAnalyzer(ApproxCountDistinct(column))
          .addAnalyzer(Distinctness(column))
+         .addAnalyzer(Uniqueness([column]))
+         .addAnalyzer(CountDistinct(column))
          .addAnalyzer(Maximum(column))
          .addAnalyzer(Minimum(column))
          .addAnalyzer(Mean(column))
          .addAnalyzer(StandardDeviation(column))
          .addAnalyzer(Sum(column))
-         .addAnalyzer(Uniqueness([column]))
-         .addAnalyzer(ApproxQuantiles(column, [0.25, 0.5, 0.75])))
+         .addAnalyzer(ApproxQuantiles(column, [0.25, 0.50, 0.75], 0.0))
+         )
 
-    def precision(self,
-                  df: DataFrame,
-                  column: str,
-                  precision: int = 38,
-                  scale: int = 4):
-        return df.withColumn(
-            column,
-            df["column"]
-            .cast(DecimalType(precision, scale)))
+    def all_columns(self):
+        """Adds the default analysis for every column in self.df"""
+        [self.add_default_analysis(column) for column in self.df.columns]
 
-    def run(self):
-        profile = AnalysisRunner(self.spark).onData(self.df)
+    def selected_columns(self, columns: list[str]):
+        """Adds the default analysis for selected columns in self.df
 
-        #[self.default(profile, column) for column in self.df.columns]
-        self.default(profile, "TMAX")
+        Parameters
+        --------
+        column: list[str]
+            The list of columns name that will be profiled.
+        """
+        [self.add_default_analysis(column) for column in columns]
 
-        results = profile.run()
+    def run_type(self, columns: list[str]):
+        """Run analysis based on type.
+        Can be all_columns or selected_columns"""
+        if not columns:
+            self.all_columns()
+        else:
+            self.selected_columns(columns)
 
-        analysisResult_df = AnalyzerContext.successMetricsAsDataFrame(self.spark, results)
-        analysisResult_df.createOrReplaceTempView("results")
+    def run(self, columns: list[str] = []):
+        """Returns a DataFrame with the result of the profiling.
 
-        analysisResult_df = self.precision(analysisResult_df, "value")
+        If there is no list of columns is empty,
+        we run the default analysis in every column.
+        If the list is not empty, we only run analysis on the list of columns.
 
-        analysisResult_df.show(100, truncate=False)
-
-        print(analysisResult_df.dtypes)
+        Parameters
+        --------
+        column: list[str]
+            The list of columns name that will be profiled.
+        """
+        self.run_type(columns)
+        analysis_results = self.analysis_runner.run()
+        df_analysis_results = AnalyzerContext.successMetricsAsDataFrame(
+            self.spark,
+            analysis_results)
+        return df_analysis_results
